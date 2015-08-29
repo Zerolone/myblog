@@ -1,0 +1,433 @@
+unit ClientFunction;
+
+interface
+
+uses IniFiles, SysUtils, StrUtils, Classes, Windows, ShlObj, PerlRegEx, Forms;
+
+procedure SaveIni(Datatext, header: string);
+function GetIni(header: string): string;
+procedure Log(LogStr: string);
+
+
+//替换图片
+function CatchPic(OldStr: Ansistring; PicStringList: TStringList): TStringList;
+
+{
+//拷贝文件到缓存
+function CopyToCache(FileName_Client: string; i: integer): string;
+
+//上传文件到服务器
+function UploadFile(FileName_Cache: string):string;
+}
+
+//检测字符串长度
+function CheckString(CheckStr: string; MaxLen: Integer): string;
+
+//选择文件夹
+//function BrowseDir(const OwnerHandle: HWND; const Caption: string; const Root: WideString): string;
+
+//////////////////////////////////
+//作用：正则替换字符串          //
+//参数：strSource   源字符串    //
+//参数：regex       正则表达式  //
+//作者：Zerolone                //
+//制作时间：2007-06-30          //
+//////////////////////////////////
+//function MRegeReplace(strSource: string; strlstRegex: TStringList; strlstReplace: TStringList): string;
+
+//////////////////////////////////
+//作用：显示一个进度窗口        //
+//参数：Title      标题         //
+//参数：Position   进度值       //
+//参数：Count      数据值       //
+//作者：Zerolone                //
+//制作时间：2008-05-25          //
+//////////////////////////////////
+procedure ShowProgress(Title: string; Position: Integer; Count: Integer);
+
+////////////////////////////////////
+//作用：同步服务端                //
+//参数：str_Content      同步内容 //
+//作者：Zerolone                  //
+//制作时间：2008年5月25日23:17:19 //
+////////////////////////////////////
+procedure SyncServer(str_Content: string);
+
+////////////////////////////////////
+//作用：显示一个Calendar          //
+//参数：id      编号              //
+//作者：Zerolone                  //
+//制作时间：2008年5月26日14:13:19 //
+////////////////////////////////////
+procedure ShowCalendar(id: Integer);
+
+////////////////////////////////////
+//作用：修改一个Calendar          //
+//参数：id      编号              //
+//作者：Zerolone                  //
+//制作时间：2008年5月26日14:13:19 //
+////////////////////////////////////
+procedure EditCalendar(id: Integer);
+
+
+implementation
+
+uses MainFrm, ProgressFrm, ShowCalendarFrm, AddCalendarFrm,
+
+  //ShowMessage用的
+  Dialogs;
+
+{
+var
+  FPath: string;
+}
+
+procedure SaveIni(Datatext, header: string);
+var
+  ServerIni: TIniFile;
+begin
+  ServerIni := TIniFile.Create(ExtractFilePath(ParamStr(0)) + 'setting.ini');
+  ServerIni.WriteString('Catch', header, Datatext);
+  ServerIni.UpdateFile;
+  ServerIni.Free;
+end;
+
+function GetIni(header: string): string;
+var
+  ServerName: string;
+  ServerIni: TIniFile;
+begin
+  ServerIni := TIniFile.Create(ExtractFilePath(ParamStr(0)) + 'setting.ini');
+  ServerName := ServerIni.ReadString('Catch', header, header);
+
+  ServerIni.Free;
+  result := ServerName;
+end;
+
+procedure Log(LogStr: string);
+var
+  F: textfile;
+  FileName: string;
+begin
+  if (MainForm.chkLog.Checked) then
+  begin
+    FileName := 'Log.log';
+
+    assignfile(F, FileName);
+    //    if FileExists(FileName) then
+    Append(F);
+    //    else
+    //      ReWrite(F);
+
+    Writeln(F, FormatDateTime('yyyy-mm-dd hh:mm:ss', now) + '|' + LogStr);
+    closefile(F);
+  end;
+end;
+
+
+function CatchPic(OldStr: Ansistring; PicStringList: TStringList): TStringList;
+var
+  OldStrLen, CutStringLen, s: Integer;
+  CutString: string;
+begin
+  //搜索<IMG
+  OldStrLen := Length(OldStr) + 1;
+  CutString := '<IMG';
+  CutStringLen := Length(CutString);
+  s := pos(CutString, OldStr);
+  if s = 0 then
+    result := PicStringList
+  else
+  begin
+    OldStr := RightStr(OldStr, OldStrLen - s - CutStringLen);
+
+    //搜索src="
+    OldStrLen := Length(OldStr) + 1;
+    CutString := 'SRC="';
+    CutStringLen := Length(CutString);
+    s := pos(CutString, OldStr);
+    if s = 0 then
+      result := PicStringList
+    else
+    begin
+      OldStr := RightStr(OldStr, OldStrLen - s - CutStringLen);
+
+      //搜索图片 "
+      OldStrLen := Length(OldStr) + 1;
+      CutString := '"';
+      CutStringLen := Length(CutString);
+      s := pos(CutString, OldStr);
+      if s = 0 then
+        result := PicStringList
+      else
+      begin
+        {
+          if ImgList = '' then
+            ImgList := LeftStr(OldStr, s - 1)
+          else
+            begin
+              ImgList := ImgList + '|' + LeftStr(OldStr, s - 1);
+            end;
+            }
+        PicStringList.Add(LeftStr(OldStr, s - 1));
+        OldStr := RightStr(OldStr, OldStrLen - s - CutStringLen);
+        result := CatchPic(OldStr, PicStringList);
+      end;
+    end;
+  end;
+end;
+
+{
+function CopyToCache(FileName_Client: string; i: integer): string;
+var
+  FileName_Cache, FileExt_Cache: string;
+begin
+  try
+    if FileExists(FileName_Client) then
+      begin
+        FileName_Cache := FormatDateTime('yyyymmddhhmmss', now);
+        FileName_Cache := FileName_Cache + IntToStr(i);
+        FileExt_Cache := StringReplace(ExtractFileExt(FileName_Client), '.', '', [rfReplaceAll]);
+        FileName_Cache := FileName_Cache + '.' + FileExt_Cache;
+        FileName_Cache := ClientSettingForm.Edt_CacheFolder.Text + '\' + FileExt_Cache + '\' + FileName_Cache;
+
+        Log('复制：' + FileName_Client + '　到：' + FileName_Cache);
+
+        if CopyFile(Pchar(FileName_Client), PChar(FileName_Cache), true) then
+          Log('成功！')
+        else
+          Log('失败！');
+        result := FileName_Cache;
+
+      end
+    else
+      Log('文件不存在：' + FileName_Client);
+  except
+    Log('复制 ' + FileName_Client + '到' + FileName_Cache + '失败！');
+  end;
+end;
+
+
+function UploadFile(FileName_Cache: string):string;
+var
+  FileName_Server, FileExt_Server: string;
+begin
+  ClientSettingForm.Btn_Connect.Click;
+
+  try
+    FileExt_Server := StringReplace(ExtractFileExt(FileName_Cache), '.', '', [rfReplaceAll]);
+    FileName_Server := ClientSettingForm.Edt_PicFolder.Text + '/' + FileExt_Server + '/' + ExtractFileName(FileName_Cache);
+
+    ClientSettingForm.IdFTP1.Put(FileName_Cache, FileName_Server, false);
+    Log('上传 ' + FileName_Cache + '到' + FileName_Server + '成功！');
+    result := FileName_Server;
+  except
+    Log('上传 ' + FileName_Cache + '到' + FileName_Server + '失败！');
+  end;
+
+end;
+}
+
+
+function CheckString(CheckStr: string; MaxLen: Integer): string;
+var CheckStrLen: Integer;
+begin
+  CheckStrLen := Length(CheckStr);
+  if CheckStrLen > MaxLen then
+    result := LeftStr(CheckStr, MaxLen)
+  else
+    result := CheckStr;
+end;
+
+{
+//跨平台目录浏览
+
+function BrowseCallBackProc(HWND: HWND; uMsg: UINT; lParam: Cardinal; lpData: Cardinal): integer; stdcall;
+begin
+  if uMsg = BFFM_INITIALIZED then
+    result := SendMessage(HWND, BFFM_SETSELECTION, Ord(TRUE), Longint(PChar(FPath)))
+  else
+    result := 1
+end;
+
+{
+function BrowseDir(const OwnerHandle: HWND; const Caption: string; const Root: WideString): string;
+var
+  BI: BROWSEINFO;
+  IDLt: pointer;
+begin
+  fillchar(BI, sizeof(BROWSEINFO), 0);
+  BI.hWndOwner := OwnerHandle;
+  BI.iImage := 0;
+  BI.lParam := 1;
+  BI.lpfn := nil;
+  BI.lpszTitle := PAnsiChar(Caption);
+  BI.ulFlags := BIF_RETURNONLYFSDIRS;
+  FPath := Root;
+  BI.lpfn := @BrowseCallBackProc;
+  BI.lParam := BFFM_INITIALIZED;
+  IDLt := SHBrowseForFolder(BI);
+  if Assigned(IDLt) then
+  begin
+    setlength(result, MAX_PATH);
+    SHGetPathFromIDList(IDLt, PChar(result));
+  end;
+end;
+}
+          {
+function MRegeReplace(strSource: string; strlstRegex: TStringList; strlstReplace: TStringList): string;
+var
+  LenRegex, i: Integer;
+  strTmp: string;
+begin
+  LenRegex := strlstRegex.Count;
+  strTmp := strSource;
+  RegexReplace := TPerlRegEx.Create(nil);
+  for i := 0 to LenRegex - 1 do
+  begin
+    RegexReplace.Regex := strlstRegex.Strings[i];
+    RegexReplace.Replacement := strlstReplace.Strings[i];
+    RegexReplace.Subject := strTmp;
+    RegexReplace.ReplaceAll;
+    strTmp := RegexReplace.Subject;
+  end;
+  {
+    RegexReplace := TPerlRegEx.Create(nil);
+    RegexReplace.Regex := '<div class="tagad">[\s\S]*?</div>';
+    RegexReplace.Replacement := '';
+    RegexReplace.Subject := strTmp;
+    RegexReplace.ReplaceAll;
+    strTmp := RegexReplace.Subject;
+  }
+{
+  result := strTmp;
+end;
+}
+
+
+procedure ShowProgress(Title: string; Position: Integer; Count: Integer);
+var
+  str_msg: string;
+begin
+  if (Title <> '') then
+    ProgressForm.Caption := Title;
+
+  ProgressForm.Show;
+  ProgressForm.ProgressBar1.Position := ProgressForm.ProgressBar1.Position + Position;
+  ProgressForm.Label1.Caption := IntToStr(ProgressForm.ProgressBar1.Position);
+
+  if (Position = 100) then
+  begin
+    str_msg := '获取服务端数据成功！共' + PAnsiChar(IntToStr(Count)) + '条记录。';
+    Application.MessageBox(PChar(str_msg), 'MGW更新成功！', MB_OK + MB_ICONASTERISK + MB_DEFBUTTON1 + MB_APPLMODAL);
+    ProgressForm.Hide;
+  end;
+end;
+
+procedure SyncServer(str_Content: string);
+var
+  //分割用的Regex
+  RegexSplit: TPerlRegEx;
+
+  //分割返回
+  str_split: TStringList;
+  int_split_count: Integer;
+
+  //
+  i: Integer;
+begin
+  //分割str_Content;
+  str_split := TStringList.Create;
+  try
+    RegexSplit := TPerlRegEx.Create(nil);
+    RegexSplit.RegEx := '@split_str_for_mgw@';
+    RegexSplit.Subject := str_Content;
+    RegexSplit.Split(str_split, 0);
+
+    int_split_count := str_split.Count;
+
+    //初始化ProgressBar
+    ShowProgress('同步服务端数据-MGW', -100, 0);
+
+    //计算ProgressBar的 Position
+    int_position := 100 div (int_split_count - 1);
+    for i := 0 to int_split_count - 2 do
+    begin
+      //提交数据库
+      MainForm.ADOQuery1.Close;
+      MainForm.ADOQuery1.SQL.Text := str_split.Strings[i];
+      MainForm.ADOQuery1.ExecSQL;
+
+      ShowProgress('', int_position, 0);
+      Application.ProcessMessages;
+    end;
+    ShowProgress('', 100, int_split_count - 1);
+  except
+    Application.MessageBox('操作失败！', '数据库连接', MB_OK + MB_ICONHAND + MB_DEFBUTTON1 + MB_APPLMODAL);
+  end;
+end;
+
+
+procedure ShowCalendar(id: Integer);
+begin
+  //连接数据库
+  MainForm.btn0.Click;
+  //-------------------0------1--------2-----------3-------------4------------5
+  str_sql := 'SELECT [id], [title], [import], [createtime], [modifytime], [content]  FROM [mgw_calendar] WHERE [id]=' + IntToStr(id);
+  MainForm.ADOQuery1.Close;
+  MainForm.ADOQuery1.SQL.Text := str_sql;
+  MainForm.ADOQuery1.Open;
+  if ((not MainForm.ADOQuery1.Eof) or (not MainForm.ADOQuery1.Bof)) then
+  begin
+    try
+      ShowCalendarForm.lbl_id.Caption := IntToStr(id);
+      ShowCalendarForm.lbl_title.Caption := MainForm.ADOQuery1.Fields[1].AsString;
+      ShowCalendarForm.lbl_import.Caption := MainForm.ADOQuery1.Fields[2].AsString;
+      ShowCalendarForm.lbl_createtime.Caption := MainForm.ADOQuery1.Fields[3].AsString;
+      ShowCalendarForm.lbl_modifytime.Caption := MainForm.ADOQuery1.Fields[4].AsString;
+      //ShowCalendarForm.DHTMLEdit1.DOM.body.innerHTML:=MainForm.ADOQuery1.Fields[5].AsString;
+      ShowCalendarForm.Memo1.Text:=MainForm.ADOQuery1.Fields[5].AsString;
+      ShowCalendarForm.Timer1.Enabled:=True;
+    except
+      Application.MessageBox('数据库查询失败！', '数据库连接', MB_OK + MB_ICONHAND + MB_DEFBUTTON1 + MB_APPLMODAL);
+    end;
+  end;
+
+  ShowCalendarForm.Color := RGB(255, 238, 238);
+  ShowCalendarForm.ShowModal;
+end;
+
+
+procedure EditCalendar(id: Integer);
+begin
+  //连接数据库
+  MainForm.btn0.Click;
+  //-------------------0------1--------2----------3
+  str_sql := 'SELECT [id], [title], [import], [content]  FROM [mgw_calendar] WHERE [id]=' + IntToStr(id);
+  MainForm.ADOQuery1.Close;
+  MainForm.ADOQuery1.SQL.Text := str_sql;
+  MainForm.ADOQuery1.Open;
+  if ((not MainForm.ADOQuery1.Eof) or (not MainForm.ADOQuery1.Bof)) then
+  begin
+    try
+      AddCalendarForm.lbl_id.Caption := IntToStr(id);
+      AddCalendarForm.Edt_title.Text := MainForm.ADOQuery1.Fields[1].AsString;
+      AddCalendarForm.cbb_import.ItemIndex:= MainForm.ADOQuery1.Fields[2].AsInteger-1;
+      //ShowCalendarForm.DHTMLEdit1.DOM.body.innerHTML:=MainForm.ADOQuery1.Fields[3].AsString;
+      AddCalendarForm.Memo1.Text:=MainForm.ADOQuery1.Fields[3].AsString;
+      AddCalendarForm.Memo1.Text:=AddCalendarForm.Memo1.Text + '<hr color="#999999" size=1>编辑时间：date("Y年m月d日 g点i分s秒 A")';
+      AddCalendarForm.Timer1.Enabled:=True;
+      AddCalendarForm.btn_add.Hide;
+      AddCalendarForm.btn_edt.Show;
+      AddCalendarForm.Caption:=' 工作计划管理 >> 工作计划修改';
+      AddCalendarForm.ShowModal;
+    except
+      Application.MessageBox('数据库查询失败！', '数据库连接', MB_OK + MB_ICONHAND + MB_DEFBUTTON1 + MB_APPLMODAL);
+    end;
+  end
+  else
+      Application.MessageBox('改数据不存在，请尝试其他数据！', '数据库查询', MB_OK + MB_ICONHAND + MB_DEFBUTTON1 + MB_APPLMODAL);
+
+end;
+end.
+

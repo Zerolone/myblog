@@ -1,0 +1,15 @@
+RewriteEngine Off
+RewriteBase /
+
+#专题
+RewriteRule special/(.*?.html) html_special.php?filename=$1
+
+#文章
+RewriteRule article/(.*?.html) html_article.php?filename=$1
+
+#文档说明也就是文章列表
+RewriteRule (.*?)/index.html html_articlelist.php?filename=$1
+#分页
+RewriteRule (.*?)/index_([2-9]{0,10}).html html_articlelist.php?filename=$1&pagenum=$2
+
+

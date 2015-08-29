@@ -1,0 +1,4 @@
+修改olectrls单元]编译之前把能找到的OleCtrls.dcu都删掉~
+
+
+DHTML 不支持此接口

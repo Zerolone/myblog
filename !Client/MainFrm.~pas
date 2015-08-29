@@ -1,0 +1,702 @@
+unit MainFrm;
+
+interface
+
+uses
+  Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
+  Dialogs, StdCtrls, IdBaseComponent, IdComponent, IdTCPConnection,
+  IdTCPClient, IdHTTP, DB, ADODB, PerlRegEx, DateUtils;
+
+type
+  TMainForm = class(TForm)
+    btnConnectServer: TButton;
+    chkLog: TCheckBox;
+    mmo1: TMemo;
+    edt_server_url: TEdit;
+    btnSaveini: TButton;
+    IdHTTP1: TIdHTTP;
+    btn1: TButton;
+    btn2: TButton;
+    btn3: TButton;
+    btn4: TButton;
+    btn5: TButton;
+    btn0: TButton;
+    ADOQuery1: TADOQuery;
+    ADOConn: TADOConnection;
+    PerlRegEx1: TPerlRegEx;
+    Edit1: TEdit;
+    Edit2: TEdit;
+    Button2: TButton;
+    Button3: TButton;
+    Button4: TButton;
+    btn_sync: TButton;
+    btn11: TButton;
+    btn12: TButton;
+    btn13: TButton;
+    btn14: TButton;
+    btn15: TButton;
+    btn51: TButton;
+    btn52: TButton;
+    procedure FormCreate(Sender: TObject);
+    procedure btnConnectServerClick(Sender: TObject);
+    procedure btnSaveiniClick(Sender: TObject);
+    procedure btn0Click(Sender: TObject);
+    procedure btn1Click(Sender: TObject);
+    procedure btn2Click(Sender: TObject);
+    procedure btn3Click(Sender: TObject);
+    procedure Button2Click(Sender: TObject);
+    procedure Button3Click(Sender: TObject);
+    procedure Button4Click(Sender: TObject);
+    procedure btn_syncClick(Sender: TObject);
+    procedure btn11Click(Sender: TObject);
+    procedure btn12Click(Sender: TObject);
+    procedure btn13Click(Sender: TObject);
+    procedure btn14Click(Sender: TObject);
+    procedure btn15Click(Sender: TObject);
+    procedure btn4Click(Sender: TObject);
+    procedure btn5Click(Sender: TObject);
+    procedure btn51Click(Sender: TObject);
+    procedure btn52Click(Sender: TObject);
+  private
+    { Private declarations }
+  public
+    { Public declarations }
+  end;
+
+var
+  MainForm: TMainForm;
+
+  //服务端路径
+  str_server_url: string;
+
+  //获取服务端内容
+  str_get_url: string;
+
+  //是否写入日志
+  ischkLog: string;
+
+  //字符串连接语句
+  strConnStr: string;
+
+  //数据库变量
+  i, ReCount: Integer;
+
+  //
+  str_Content: string;
+
+  //最大的SID
+  Max_SID: Integer;
+
+  //ProgressBar Position
+  int_position: Integer;
+
+  //Sql查询字符串
+  str_sqlR, str_sqlL, str_sql: string;
+
+  //客户端的sid， 客户端的modifytime, 服务端的modifytime
+  str_client_id, str_client_modifytime, str_server_modifytime: string;
+
+  //分割用的Regex
+  RegexSplit_sid: TPerlRegEx;
+  RegexSplit_client_modifytime: TPerlRegEx;
+  RegexSplit_server_modifytime: TPerlRegEx;
+
+  //分割返回
+  str_split_sid: TStringList;
+  str_split_client_modifytime: TStringList;
+  str_split_server_modifytime: TStringList;
+  int_split_sid_count: Integer;
+
+  //同步ID
+  //客户端同步到服务端的id
+  str_client_server: string;
+  //服务端同步到客户端的id
+  str_server_client: string;
+
+  //
+  int_CompareDateTime: Integer;
+  str_CompareDateTime: string;
+
+  //sql字符串
+  strlst_sql: TStringList;
+implementation
+
+uses ClientFunction, CalendarFrm, ProgressFrm;
+
+{$R *.dfm}
+
+procedure TMainForm.FormCreate(Sender: TObject);
+begin
+  //系统启动的默认设置
+  begin
+    //初始化控件
+    mmo1.Clear;
+
+    //读取ini
+    try
+      //////////////////////
+      // //
+      //////////////////////
+      //服务端接口路径
+      edt_server_url.Text := GetIni('edt_server_url');
+      str_server_url := edt_server_url.Text;
+
+      //主网站
+      //edtWebSite.Text := GetIni('edtWebSite');
+
+
+      //是否写入日志
+      ischkLog := GetIni('chkLog');
+      if (ischkLog = '1') then
+        chkLog.Checked := True;
+
+      //////////////
+      //数据库设置//
+      //////////////
+      {
+      Edt_DBIP.Text := GetIni('DBIP');
+      Edt_DBUser.Text := GetIni('DBUser');
+      Edt_DBPassword.Text := GetIni('DBPassword');
+      Edt_DBDatabase.Text := GetIni('DBDatabase');
+      }
+      {
+      //上传设置
+      Edt_Website.Text := GetIni('Website');
+      Edt_PicFolder.Text := GetIni('PicFolder');
+      }
+    except
+      Log('读取配置文件 setting.ini 失败！');
+      Application.MessageBox('读取配置文件 setting.ini 失败！', '读取配置文件', MB_OK + MB_ICONEXCLAMATION + MB_APPLMODAL);
+    end;
+  end;
+
+end;
+
+procedure TMainForm.btnConnectServerClick(Sender: TObject);
+var
+  //获取内容
+  str_Content: string;
+begin
+  //连接服务端接口
+  //测试为：http://localhost/client.php
+
+  str_server_url := edt_server_url.Text;
+
+  //获取服务端内容
+  try
+    str_Content := IdHTTP1.Get(str_server_url + '?checkconnect=true');
+    mmo1.Clear;
+    mmo1.Text := str_Content;
+    if (str_Content = 'true') then
+    begin
+      Application.MessageBox('连接服务器成功！', '连接服务器', MB_OK + MB_ICONEXCLAMATION + MB_APPLMODAL);
+    end
+    else
+    begin
+      Application.MessageBox('连接服务器失败，请检测设置！', '连接服务器', MB_OK + MB_ICONEXCLAMATION + MB_APPLMODAL);
+    end;
+
+  except
+    Application.MessageBox('服务端文件不存在，请检测设置！', '连接服务器', MB_OK + MB_ICONEXCLAMATION + MB_APPLMODAL);
+
+  end;
+
+
+
+
+
+  //读取ini设置
+
+end;
+
+procedure TMainForm.btnSaveiniClick(Sender: TObject);
+begin
+  try
+    ////////////////
+    //抓取地址部分//
+    ////////////////
+    //网址部分
+    SaveIni(edt_server_url.Text, 'edt_server_url');
+
+    //SaveIni(edtWebSite.Text, 'edtWebSite');
+
+    //是否记录日志
+    if (chkLog.Checked) then
+      SaveIni('1', 'chkLog')
+    else
+      SaveIni('0', 'chkLog');
+
+    //////////////
+    //数据库部分//
+    //////////////
+    {
+    SaveIni(Edt_DBUser.Text, 'DBUser');
+    SaveIni(Edt_DBPassword.Text, 'DBPassword');
+    SaveIni(Edt_DBIP.Text, 'DBIP');
+    SaveIni(Edt_DBDatabase.Text, 'DBDatabase');
+     }
+
+    Log('Ini配置保存成功！');
+    Application.MessageBox('Ini配置保存成功！', '保存配置文件', MB_OK + MB_ICONEXCLAMATION + MB_APPLMODAL);
+  except
+    Log('保存失败！请检查文件 setting.ini 是否可写');
+    Application.MessageBox('保存配置文件 setting.ini 失败！请检查文件 setting.ini 是否可写', '保存配置文件', MB_OK + MB_ICONEXCLAMATION + MB_APPLMODAL);
+
+  end;
+end;
+
+procedure TMainForm.btn0Click(Sender: TObject);
+begin
+  //0、连接数据库
+  try
+    if not ADOConn.Connected then
+      ADOConn.ConnectionString := 'Provider=Microsoft.Jet.OLEDB.4.0;Data Source=' + ExtractFilepath(Application.ExeName) + '\mgw.mdb;Persist Security Info=False';
+    ADOConn.Open;
+    Log('数据库连接成功！');
+    mmo1.Text := '数据库连接成功！' + #13 + #10 + mmo1.Text;
+    
+  except
+    Log('数据库连接失败！');
+    mmo1.Text := '数据库连接失败！' + #13 + #10 + mmo1.Text;
+    Application.MessageBox('数据库连接失败！', '数据库连接', MB_OK + MB_ICONHAND + MB_DEFBUTTON1 + MB_APPLMODAL);
+  end;
+end;
+
+procedure TMainForm.btn1Click(Sender: TObject);
+begin
+  //连接数据库
+  btn0.click;
+  //1、同步SID不为0的记录
+
+  //1.1、获取本地SID不为0的列表
+  btn11.click;
+
+  //1.2、获取服务端相应编号
+  btn12.click;
+
+  //1.3、比较str_client_modify 与 str_server_modify
+  btn13.click;
+
+  //1.4、服务端同步客户端
+  btn14.click;
+
+  //1.5、客户端同步服务端
+  btn15.click;
+end;
+
+procedure TMainForm.btn2Click(Sender: TObject);
+begin
+  //2、获取最大的SID
+  ADOQuery1.Close;
+  ADOQuery1.SQL.Text := 'SELECT MAX([sid]) as [max_sid] FROM [mgw_calendar] WHERE [sid]<>0';
+  ADOQuery1.Open;
+  Max_SID := ADOQuery1.FieldByName('max_sid').AsInteger;
+  ADOQuery1.Close;
+
+  mmo1.Text := '最大的SID为：' + IntToStr(Max_SID) + #13 + #10 + mmo1.Text;
+end;
+
+procedure TMainForm.btn3Click(Sender: TObject);
+var
+  str_get_url: string;
+begin
+  //3、获取服务端大于最大SID的ID的内容
+
+  //服务端路径
+  str_get_url := str_server_url + '?sid=' + IntToStr(Max_SID);
+  try
+    str_Content := IdHTTP1.Get(str_get_url);
+    Log('获取' + str_get_url + '内容成功！');
+  except
+    Log('获取' + str_get_url + '内容失败！');
+    Application.MessageBox('获取服务端数据失败，请检查你的网络设置！', '获取服务端数据', MB_OK + MB_ICONHAND + MB_DEFBUTTON1 + MB_APPLMODAL);
+  end;
+
+  SyncServer(str_Content);
+end;
+
+procedure TMainForm.Button2Click(Sender: TObject);
+begin
+  CalendarForm.Button1.Click;
+  CalendarForm.ShowModal;
+end;
+
+procedure TMainForm.Button3Click(Sender: TObject);
+begin
+  //
+  ProgressForm.Show;
+
+  //ShowProgress(10);
+end;
+
+procedure TMainForm.Button4Click(Sender: TObject);
+
+begin
+  //
+
+
+
+
+end;
+
+procedure TMainForm.btn_syncClick(Sender: TObject);
+begin
+  //0、连接数据库
+  btn0.click;
+
+
+  //2、获取最大的SID
+  btn2.click;
+
+
+  //3、获取服务端大于最大SID的ID的内容
+  btn3.click;
+
+
+end;
+
+procedure TMainForm.btn11Click(Sender: TObject);
+var
+  i:Integer;
+begin
+  //1.1、获取本地SID不为0的列表
+  str_client_id := '';
+  //-------------------0--------1
+  str_sql := 'SELECT [sid], [modifytime] FROM [mgw_calendar] WHERE [sid]<>0';
+  ADOQuery1.Close;
+  ADOQuery1.SQL.Text := str_sql;
+  ADOQuery1.Open;
+  if ((not ADOQuery1.Eof) or (not ADOQuery1.Bof)) then
+  begin
+    ReCount := ADOQuery1.recordcount;
+    try
+      for i := 1 to ReCount do
+      begin
+        if (str_client_id = '') then
+        begin
+          str_client_id := ADOQuery1.Fields[0].AsString;
+          str_client_modifytime := ADOQuery1.Fields[1].AsString;
+        end
+        else
+        begin
+          str_client_id := str_client_id + ',' + ADOQuery1.Fields[0].AsString;
+          str_client_modifytime := str_client_modifytime + ',' + ADOQuery1.Fields[1].AsString;
+        end;
+        ADOQuery1.Next;
+      end;
+      mmo1.Text := mmo1.Text + #13 + #10 + str_client_id;
+      mmo1.Text := mmo1.Text + #13 + #10 + '---------------';
+      mmo1.Text := mmo1.Text + #13 + #10 + str_client_modifytime;
+
+    except
+      Application.MessageBox('数据库查询失败！', '数据库连接', MB_OK + MB_ICONHAND + MB_DEFBUTTON1 + MB_APPLMODAL);
+    end;
+  end
+  else
+  begin
+    Application.MessageBox('不存在SID不为0的记录！', '数据库连接', MB_OK + MB_ICONHAND + MB_DEFBUTTON1 + MB_APPLMODAL);
+  end;
+  ADOQuery1.Close;
+end;
+
+procedure TMainForm.btn12Click(Sender: TObject);
+begin
+  //1.2、获取服务端相应编号
+  try
+    str_server_modifytime := IdHTTP1.Get(str_server_url + '?modifyid=' + str_client_id);
+    mmo1.Text := mmo1.Text + #13 + #10 + str_server_modifytime;
+  except
+    Application.MessageBox('获取服务端数据失败！', '获取服务端数据', MB_OK + MB_ICONHAND + MB_DEFBUTTON1 + MB_APPLMODAL);
+  end;
+end;
+
+procedure TMainForm.btn13Click(Sender: TObject);
+var
+  i:Integer;
+begin
+  //1.3、比较str_client_modify 与 str_server_modify
+  str_split_sid := TStringList.Create;
+  str_split_client_modifytime := TStringList.Create;
+  str_split_server_modifytime := TStringList.Create;
+  try
+    RegexSplit_sid := TPerlRegEx.Create(nil);
+    RegexSplit_sid.RegEx := ',';
+    RegexSplit_sid.Subject := str_client_id;
+    RegexSplit_sid.Split(str_split_sid, 0);
+
+    RegexSplit_client_modifytime := TPerlRegEx.Create(nil);
+    RegexSplit_client_modifytime.RegEx := ',';
+    RegexSplit_client_modifytime.Subject := str_client_modifytime;
+    RegexSplit_client_modifytime.Split(str_split_client_modifytime, 0);
+
+    RegexSplit_server_modifytime := TPerlRegEx.Create(nil);
+    RegexSplit_server_modifytime.RegEx := ',';
+    RegexSplit_server_modifytime.Subject := str_server_modifytime;
+    RegexSplit_server_modifytime.Split(str_split_server_modifytime, 0);
+
+    int_split_sid_count := str_split_sid.Count;
+
+    str_client_server := '';
+    str_server_client := '';
+    for i := 0 to int_split_sid_count - 1 do
+    begin
+      int_CompareDateTime := CompareDateTime(StrToDateTime(str_split_client_modifytime[i]), StrToDateTime(str_split_server_modifytime[i]));
+      str_CompareDateTime := '客户端等于服务端=';
+      if (int_CompareDateTime = -1) then
+      begin
+        str_CompareDateTime := '客户端小于服务端<';
+        if (str_client_server = '') then
+          str_client_server := str_split_sid[i]
+        else
+          str_client_server := str_client_server + ',' + str_split_sid[i];
+      end
+      else
+        if (int_CompareDateTime = 1) then
+        begin
+          str_CompareDateTime := '客户端大于服务端>';
+          if (str_server_client = '') then
+            str_server_client := str_split_sid[i]
+          else
+            str_server_client := str_server_client + ',' + str_split_sid[i];
+        end;
+
+      mmo1.Text := '编号：' + str_split_sid[i] + '｜客户端时间：' + str_split_client_modifytime[i] + '｜服务端时间：' + str_split_server_modifytime[i] + '｜' + str_CompareDateTime + #13 + #10 + mmo1.Text;
+
+      Application.ProcessMessages;
+    end;
+  except
+    Application.MessageBox('操作失败！', '数据库连接', MB_OK + MB_ICONHAND + MB_DEFBUTTON1 + MB_APPLMODAL);
+  end;
+end;
+
+procedure TMainForm.btn14Click(Sender: TObject);
+begin
+  //1.4、服务端同步客户端
+  if (str_client_server <> '') then
+  begin
+    try
+      str_get_url := str_server_url + '?server_client_id=' + str_client_server;
+      str_Content := IdHTTP1.Get(str_get_url);
+      //      mmo1.Text := str_get_url + #13 + #10 + mmo1.Text;
+      //      mmo1.Text := str_Content + #13 + #10 + mmo1.Text;
+    except
+
+    end;
+    if (str_Content <> '') then
+      SyncServer(str_Content)
+    else
+      Application.MessageBox('无数据需要更新！', '1服务端同步客户端-MGW', MB_OK + MB_ICONASTERISK + MB_DEFBUTTON1 + MB_APPLMODAL);
+  end
+  else
+    Application.MessageBox('无数据需要更新！', '服务端同步客户端-MGW', MB_OK + MB_ICONASTERISK + MB_DEFBUTTON1 + MB_APPLMODAL);
+
+end;
+
+procedure TMainForm.btn15Click(Sender: TObject);
+var
+  i:Integer;
+begin
+  //1.5、客户端同步服务端
+  if (str_server_client <> '') then
+  begin
+    strlst_sql := TStringList.Create;
+    //--------------------0--------1----------2---------3-------------4------------5---------6
+    str_sql := 'SELECT [userid], [title], [import], [createtime], [modifytime], [content], [sid] FROM [mgw_calendar] WHERE [sid] in (' + str_server_client + ')';
+    ADOQuery1.Close;
+    ADOQuery1.SQL.Text := str_sql;
+    ADOQuery1.Open;
+    if ((not ADOQuery1.Eof) or (not ADOQuery1.Bof)) then
+    begin
+      ReCount := ADOQuery1.recordcount;
+      for i := 0 to ReCount - 1 do
+      begin
+        str_sql := 'UPDATE `mgw_calendar` SET ';
+
+        //所属用户
+        str_sql := str_sql + '`userid`=';
+        str_sql := str_sql + ADOQuery1.Fields[0].AsString + ',';
+
+        //标题
+        str_sql := str_sql + '`title`=';
+        str_sql := str_sql + '''' + ADOQuery1.Fields[1].AsString + ''',';
+
+        //关键度
+        str_sql := str_sql + '`import`=';
+        str_sql := str_sql + ADOQuery1.Fields[2].AsString + ',';
+
+        //提交时间
+        str_sql := str_sql + '`createtime`=';
+        str_sql := str_sql + '''' + ADOQuery1.Fields[3].AsString + ''',';
+
+        //修改时间
+        str_sql := str_sql + '`modifytime`=';
+        str_sql := str_sql + '''' + ADOQuery1.Fields[4].AsString + ''',';
+
+        //内容
+        str_sql := str_sql + '`content` = ';
+        str_sql := str_sql + '''' + ADOQuery1.Fields[5].AsString + '''';
+
+        str_sql := str_sql + ' WHERE `id`=' + ADOQuery1.Fields[6].AsString;
+        str_sql := str_sql + ';';
+
+        strlst_sql.Add('SqlStr[]=' + str_sql);
+        mmo1.Text := str_sql + #13 + #10 + mmo1.Text;
+        Log(str_sql);
+
+        ADOQuery1.Next;
+        Application.ProcessMessages;
+        //mmo1.Text := str_sql + #13 + #10 + mmo1.Text;
+      end;
+
+      try
+        IdHTTP1.Post(str_server_url, strlst_sql);
+        Log('提交到' + str_server_url + '内容成功！');
+      except
+        Log('提交到' + str_server_url + '内容失败！');
+        Application.MessageBox('提交数据到服务端失败，请检查你的网络设置！', '获取服务端数据', MB_OK + MB_ICONHAND + MB_DEFBUTTON1 + MB_APPLMODAL);
+      end;
+
+    end
+    else
+      Application.MessageBox('客户端没有比服务端更新的数据，则无数据需要更新！', '客户端同步服务端-MGW', MB_OK + MB_ICONASTERISK + MB_DEFBUTTON1 + MB_APPLMODAL);
+    ADOQuery1.Close;
+  end
+  else
+    Application.MessageBox('客户端没有比服务端更新的数据，则无数据需要更新！', '客户端同步服务端-MGW', MB_OK + MB_ICONASTERISK + MB_DEFBUTTON1 + MB_APPLMODAL);
+
+end;
+
+procedure TMainForm.btn4Click(Sender: TObject);
+var
+  i:Integer;
+begin
+  //4、提交本地增加的记录
+  strlst_sql := TStringList.Create;
+  strlst_sql.Clear;
+  //--------------------0--------1----------2---------3-------------4------------5---------6
+  str_sql := 'SELECT [userid], [title], [import], [createtime], [modifytime], [content], [sid] FROM [mgw_calendar] WHERE [sid]=0';
+  ADOQuery1.Close;
+  ADOQuery1.SQL.Text := str_sql;
+  ADOQuery1.Open;
+  if ((not ADOQuery1.Eof) or (not ADOQuery1.Bof)) then
+  begin
+    ReCount := ADOQuery1.recordcount;
+    for i := 0 to ReCount - 1 do
+    begin
+      str_sqlL := 'insert into `mgw_calendar` (';
+      str_sqlR := 'values (';
+
+      //所属用户
+      str_sqlL := str_sql + '`userid`,';
+      str_sqlR := str_sql + ADOQuery1.Fields[0].AsString + ',';
+
+      //标题
+      str_sqlL := str_sql + '`title`,';
+      str_sqlR := str_sql + '''' + ADOQuery1.Fields[1].AsString + ''',';
+
+      //关键度
+      str_sqlL := str_sql + '`import`,';
+      str_sqlR := str_sql + ADOQuery1.Fields[2].AsString + ',';
+
+      //提交时间
+      str_sqlL := str_sql + '`createtime`,';
+      str_sqlR := str_sql + '''' + ADOQuery1.Fields[3].AsString + ''',';
+
+      //修改时间
+      str_sqlL := str_sql + '`modifytime`,';
+      str_sqlR := str_sql + '''' + ADOQuery1.Fields[4].AsString + ''',';
+
+      //内容
+      str_sqlL := str_sql + '`content`)';
+      str_sqlR := str_sql + '''' + ADOQuery1.Fields[5].AsString + ''');';
+
+      strlst_sql.Add('SqlStr[]=' + str_sqlL + str_sqlR);
+      mmo1.Text := str_sql + #13 + #10 + mmo1.Text;
+      Log(str_sql);
+
+      ADOQuery1.Next;
+      Application.ProcessMessages;
+      //mmo1.Text := str_sql + #13 + #10 + mmo1.Text;
+    end;
+
+    try
+      IdHTTP1.Post(str_server_url, strlst_sql);
+      Log('提交到' + str_server_url + '内容成功！');
+    except
+      Log('提交到' + str_server_url + '内容失败！');
+      Application.MessageBox('提交数据到服务端失败，请检查你的网络设置！', '获取服务端数据', MB_OK + MB_ICONHAND + MB_DEFBUTTON1 + MB_APPLMODAL);
+    end;
+
+  end
+
+end;
+
+procedure TMainForm.btn5Click(Sender: TObject);
+begin
+  //5、同步SID为0的记录
+
+  //5.1、获取SID为0的记录
+//  btn51.Click;
+
+  //5.2、获取服务端相应编号
+//  btn52.Click;
+
+end;
+
+procedure TMainForm.btn51Click(Sender: TObject);
+var
+  i:Integer;
+begin
+  //5.1、获取SID为0的记录
+  str_client_id := '';
+  //-------------------0--------1
+  str_sql := 'SELECT [sid], [id] FROM [mgw_calendar] WHERE [sid]=0';
+  ADOQuery1.Close;
+  ADOQuery1.SQL.Text := str_sql;
+  ADOQuery1.Open;
+  if ((not ADOQuery1.Eof) or (not ADOQuery1.Bof)) then
+  begin
+    ReCount := ADOQuery1.recordcount;
+    try
+      for i := 1 to ReCount do
+      begin
+        if (str_client_id = '') then
+        begin
+          str_client_id := ADOQuery1.Fields[0].AsString;
+          str_client_modifytime := ADOQuery1.Fields[1].AsString;
+        end
+        else
+        begin
+          str_client_id := str_client_id + ',' + ADOQuery1.Fields[0].AsString;
+          str_client_modifytime := str_client_modifytime + ',' + ADOQuery1.Fields[1].AsString;
+        end;
+        ADOQuery1.Next;
+      end;
+      mmo1.Text := mmo1.Text + #13 + #10 + str_client_id;
+      mmo1.Text := mmo1.Text + #13 + #10 + '---------------';
+      mmo1.Text := mmo1.Text + #13 + #10 + str_client_modifytime;
+
+    except
+      Application.MessageBox('数据库查询失败！', '数据库连接', MB_OK + MB_ICONHAND + MB_DEFBUTTON1 + MB_APPLMODAL);
+    end;
+  end
+  else
+  begin
+    Application.MessageBox('不存在SID为0的记录！', '数据库连接', MB_OK + MB_ICONHAND + MB_DEFBUTTON1 + MB_APPLMODAL);
+  end;
+  ADOQuery1.Close;
+end;
+
+procedure TMainForm.btn52Click(Sender: TObject);
+begin
+  //5.2、获取服务端相应编号
+  try
+    str_server_modifytime := IdHTTP1.Get(str_server_url + '?modifyid=' + str_client_id);
+    mmo1.Text := mmo1.Text + #13 + #10 + str_server_modifytime;
+  except
+    Application.MessageBox('获取服务端数据失败！', '获取服务端数据', MB_OK + MB_ICONHAND + MB_DEFBUTTON1 + MB_APPLMODAL);
+  end;
+end;
+
+end.
+
